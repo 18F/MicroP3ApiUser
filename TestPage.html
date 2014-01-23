@@ -1,0 +1,169 @@
+<!DOCTYPE html>
+  <html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <title>MicroAPI for Prices Paid Portal (P3)</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="">
+    <meta name="author" content="">
+
+  </head>
+    <body>
+      <h1>Submit query</h1>
+      <script src="http://code.jquery.com/jquery.js"></script>
+
+      <form class="navbar-form pull-right">
+         <input id="small_search_string" class="span2" type="text" placeholder="Query">
+         <input id="numrows" class="span2" type="text" placeholder="number...">
+         <input type="button" id="searchButton" value="Search" onclick="performSearch();">
+       </form>
+
+<div>
+<button class="loginButton" id="max">Sign in with MAX</button>
+</div>
+
+
+    <div class="container">
+
+<!-- Will put Ajax results here -->
+    <div id="detailArea"></div>
+
+    </div> <!-- /container -->
+
+    </body>
+  </html>
+
+<script>
+
+// code taken from stackoverflow
+var qs = (function(a) {
+    if (a == "") return {};
+    var b = {};
+    for (var i = 0; i < a.length; ++i)
+    {
+        var p=a[i].split('=');
+        if (p.length != 2) continue;
+        b[p[0]] = decodeURIComponent(p[1].replace(/\+/g, " "));
+    }
+    return b;
+})(window.location.search.substr(1).split('&'));
+
+session_id = qs["p3session_id"];
+acsrf = qs["p3acsrf"];
+
+// We hide the search button if you haven't got a session...
+if ((typeof session_id === 'undefined') || 
+    (typeof acsrf === 'undefined')) {
+   document.getElementById('searchButton').style.display = 'none';
+} 
+
+
+$("#max").click(function () {
+
+// Here we want to do a redirect or a form submission to
+// get us to the P3 server to handle the GUI part, and 
+// we need to tell it to redirect back to us here!
+
+    window.location.replace("http://127.0.0.1/apisolr/GetTokensViaMax?redirectbackto=http://127.0.0.1/microApiUser/TestPage.html");
+
+});
+
+
+var standardFieldDescriptor = [];
+standardFieldDescriptor["score"] = "Query Relevance";
+standardFieldDescriptor["unitPrice"] = "Unit Price";
+standardFieldDescriptor["unitsOrdered"] = "Units Ordered";
+standardFieldDescriptor["orderDate"] = "Date";
+standardFieldDescriptor["vendor"] = "Vendor";
+standardFieldDescriptor["productDescription"] = "Product Description";
+standardFieldDescriptor["longDescription"] = "Long Description";
+standardFieldDescriptor["contractingAgency"] = "Contracting Agency";
+standardFieldDescriptor["awardIdIdv"] = "Award ID/IDV";
+standardFieldDescriptor["commodityType"] = "Commodity Type";
+standardFieldDescriptor["psc"] = "PSC";
+
+function numberWithCommas(x) {
+    var parts = x.toString().split(".");
+    parts[0] = parts[0].replace(/\B(?=(\d{3})+(?!\d))/g, ",");
+    return parts.join(".");
+}
+
+
+function renderMicroRow(dataRow) {
+	var html = "";
+	html +=      ' <div class="result">';
+	html +=      '<span class="unitPrice">'+ '$'+numberWithCommas(dataRow.unitPrice)+ ' </span>'; 
+	html +=      '<span class="result-details"> '+dataRow.productDescription.substring(0,30)+ ' </span>'; 
+	html +=      '</div>';
+        return html;
+}
+var apisolrurl = "http://127.0.0.1/apisolr";
+var apisolrurlsession = "http://127.0.0.1/apisolr/session";
+
+function performSearch() {
+    var search = $('#small_search_string').val();
+    var num = $('#numrows').val();
+    if (search.length == 0) {
+      alert("Please enter a search term or phrase.");
+      return;
+    }
+    if (!($.isNumeric(num) && (num > 0))) {
+      alert("Please enter a positive number of rows.");
+      return;
+    }
+
+$.ajax({
+    type: 'GET',
+    url: apisolrurlsession,
+    async: false,
+    jsonpCallback: 'processAjaxSearch',
+    contentType: "application/json",
+    dataType: 'jsonp',
+    data: {
+       p3session_id: session_id,
+       p3acsrf: acsrf,
+       numRows: num,
+       search_string: search,
+       psc_pattern: '*'
+    },
+    error: function(e) {
+       alert("e.message = "+e.message);
+       console.log(e.message);
+    }
+  });
+
+}
+
+function processAjaxSearch(dataFromSearch) {
+// If we timed out or failed to authenticate, we need to alert the user.
+    if (!(dataFromSearch != null && typeof dataFromSearch === 'object')) {
+		 alert("No results returned.");
+		 return;
+    }
+    if ((typeof dataFromSearch) == 'undefined') {
+		 alert("No results returned.");
+		 return;
+    }
+    if (dataFromSearch[0] === undefined) {
+		 alert("No results returned.");
+		 return;
+    }
+		 
+    if (dataFromSearch[0]["status"] && (dataFromSearch[0]["status"] == "BadAuthentication")) {
+        alert("Unable to Authenticate. Probably your session timed-out. Please log in again.");	 
+    }
+
+    function redrawDetailArea(dictFromSearch) {
+	var detailAreaDiv = $("#"+'detailArea');
+	detailAreaDiv.empty();
+
+	for (var key in dictFromSearch) {
+            detailAreaDiv.append(renderMicroRow(dictFromSearch[key]));
+        }
+    }
+
+    redrawDetailArea(dataFromSearch);
+
+}
+</script>
